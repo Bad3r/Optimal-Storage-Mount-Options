@@ -22,16 +22,16 @@
 - ## Options Explanation
 	- **`defaults`**: This is a shorthand for using the default mount options, which include options like `rw` (read/write), `suid`, `dev`, `exec`, `auto`, `nouser`, and `async`. These are generally safe to use and provide standard functionality.
 	- **`noatime`** is used universally to prevent unnecessary access time updates, which improves performance and reduces wear on SSDs and HDDs alike.
-	- **`barrier=1`** is critical for data integrity, ensuring that all data is safely written to disk.
+	- **`barrier=1`** is critical for data integrity, ensuring all data is safely written to disk.
 	- **`errors=remount-ro`**: Remounts the filesystem as read-only in case of errors.
 	- **`commit=60/120/300**` are used to balance data integrity and performance. A shorter interval (`commit=60`) is chosen for the root partition, where stability is crucial, while a longer interval is used for external drives to reduce the frequency of writes. Note that the default value is `5`
-	- **`data=ordered`** is applied only to HDDs, where it ensures the correct order of writes and improves data consistency in the event of a crash.
+	- **`data=ordered`** is applied only to HDDs, ensuring the correct order of writes and improving data consistency in the event of a crash.
 	-
 - ## FAQ
 	- Why is Ext4 used over other filesystems?
-		- Since Ext4 is the most mature filesystem its recommended unless you have reason not to use it.
+		- Since Ext4 is the most mature filesystem its recommended unless you have a reason not to use it.
 	- Why is the `discard=async` option not used
-		- Since `fstrim.timer` is enabled via systemctl. Its not recommended to use the discard option with it to avoid conflicts or redundant TRIM operations.
+		- Since `fstrim.timer` is enabled via systemctl. It is not recommended to use the discard option with it to avoid conflicts or redundant TRIM operations.
 			- **`fstrim.timer`** vs **`discard=async`**
 				- **`fstrim.timer`** runs TRIM periodically (typically once a week), which is better suited for avoiding performance hits during file operations. This is generally the preferred method for most SSDs because it defers TRIM operations to a scheduled time, minimizing impact on regular usage.
 				- **`discard=async`** performs TRIM in real time but asynchronously, meaning it will not block file operations. It is more efficient than the older synchronous `discard` option, but it can still introduce a performance overhead when working with very large numbers of file deletions.
