@@ -1,7 +1,7 @@
 ## Recommended mount flags (Ext4)
 - Root partition
   ```
-  defaults,noatime,barrier=1,errors=remount-ro,commit=60
+  defaults,lazytime,nodiratime,barrier=1,errors=remount-ro,commit=30
   ```
 - External NVME SSDs
   ```
