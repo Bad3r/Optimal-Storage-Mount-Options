@@ -10,13 +10,14 @@
 - External HDD (Focused on Data Integrity and Longevity)
   ```
   defaults,noatime,barrier=1,data=ordered,errors=remount-ro,commit=300
+  ```
 - After changing filesystem options, update settings in all initramfs images:
 	- Arch Linux 
-  ```
+	  ```
 	  $ sudo update-initramfs -u -k all  
-  ```
+	  ```
 	- Debian
-  ```
+	  ```
 	  $ sudo update-initramfs -u -k all  
 	  ```
 ## Options Explanation
