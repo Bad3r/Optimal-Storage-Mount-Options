@@ -25,7 +25,7 @@
 - **`noatime`** is used universally to prevent unnecessary access time updates, which improves performance and reduces wear on SSDs and HDDs alike.
 - **`barrier=1`** is critical for data integrity, ensuring all data is safely written to disk.
 - **`errors=remount-ro`**: Remounts the filesystem as read-only in case of errors.
-- **`commit=60/120/300**` are used to balance data integrity and performance. A shorter interval (`commit=60`) is chosen for the root partition, where stability is crucial, while a longer interval is used for external drives to reduce the frequency of writes. Note that the default value is `5`
+- **`commit=60/120/300`** are used to balance data integrity and performance. A shorter interval (`commit=60`) is chosen for the root partition, where stability is crucial, while a longer interval is used for external drives to reduce the frequency of writes. Note that the default value is `5`
 - **`data=ordered`** is applied only to HDDs, ensuring the correct order of writes and improving data consistency in the event of a crash.
 
 
