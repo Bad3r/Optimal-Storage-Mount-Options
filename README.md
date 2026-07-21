@@ -1,71 +1,107 @@
-## Recommended mount flags (Ext4)
-- Root partition
-  ```
-  defaults,lazytime,nodiratime,barrier=1,errors=remount-ro,commit=30
-  ```
-- External NVME SSDs
-  ```
-  defaults,noatime,barrier=1,errors=remount-ro,commit=60
-  ```
-- External HDD (Focused on Data Integrity and Longevity)
-  ```
-  defaults,noatime,barrier=1,data=ordered,errors=remount-ro,commit=300
-  ```
-- After changing filesystem options, update settings in all initramfs images:
-	- Arch Linux 
-	  ```
-	  $ sudo update-initramfs -u -k all  
-	  ```
-	- Debian
-	  ```
-	  $ sudo update-initramfs -u -k all  
-	  ```
-## Options Explanation
-- **`defaults`**: This is a shorthand for using the default mount options, which include options like `rw` (read/write), `suid`, `dev`, `exec`, `auto`, `nouser`, and `async`. These are generally safe to use and provide standard functionality.
-- **`noatime`** is used universally to prevent unnecessary access time updates, which improves performance and reduces wear on SSDs and HDDs alike.
-- **`barrier=1`** is critical for data integrity, ensuring all data is safely written to disk.
-- **`errors=remount-ro`**: Remounts the filesystem as read-only in case of errors.
-- **`commit=60/120/300`** are used to balance data integrity and performance. A shorter interval (`commit=60`) is chosen for the root partition, where stability is crucial, while a longer interval is used for external drives to reduce the frequency of writes. Note that the default value is `5`
-- **`data=ordered`** is applied only to HDDs, ensuring the correct order of writes and improving data consistency in the event of a crash.
+# Linux Storage, Filesystem, Partitioning, and Encryption Guide
 
+**Research cutoff:** July 21, 2026
 
-- ## FAQ
-- Why is Ext4 used over other filesystems?
-	- Since Ext4 is the most mature filesystem its recommended unless you have a reason not to use it.
-- Why is the `discard=async` option not used
-	- Since `fstrim.timer` is enabled via systemctl. It is not recommended to use the discard option with it to avoid conflicts or redundant TRIM operations.
-		- **`fstrim.timer`** vs **`discard=async`**
-			- **`fstrim.timer`** runs TRIM periodically (typically once a week), which is better suited for avoiding performance hits during file operations. This is generally the preferred method for most SSDs because it defers TRIM operations to a scheduled time, minimizing impact on regular usage.
-			- **`discard=async`** performs TRIM in real time but asynchronously, meaning it will not block file operations. It is more efficient than the older synchronous `discard` option, but it can still introduce a performance overhead when working with very large numbers of file deletions.
-- **Compression**
-	- The compression option is not used with Ext4 since it does not support it unlike Btrfs and ZFS
-	- Btrfs specific options
-		- With Btrfs its recommended to add the option `compress-force=zstd:3`. Compression level 3 is the default so it can be committed. Consider compression level `1` for better performance.
-			- unlike the `compress` option `compress-force` applies compression to newly written data disregarding Btrfs checks if the data is compressible. Instead zstd does a check internally that's more efficient than the one Btrfs does.
-		- add `space_cache=v2` and `ssd`
+An opinionated, decision-complete guide to Linux storage architecture. It
+covers filesystem selection, disk partitioning, encryption, PCIe 5.0 NVMe
+behavior, mount policy, TRIM, deployment, monitoring, backup, and recovery.
 
+The project chooses a complete storage stack by workload, integrity model,
+recovery model, and portability. It does not choose a filesystem from a drive's
+advertised sequential speed or apply generic mount-option folklore.
 
-## General recommendations
-- Enable `fstrim.timer`
-  ```
-  $ systemctl enable --now fstrim.service  
-  ```
-	- Note that veracrypt blocks trim operations for security reasons.
-- Use `smartctl -a` to check for issues
-  ```
-  $ sudo smartctl -a /dev/<dev>  
-  ```
-- Use RAMDISK to reduce write frequency
-  ```
-  $ sudo cp /usr/share/systemd/tmp.mount /etc/systemd/system/  
-  $ sudo systemctl enable --now tmp.mount  
-  ```
-- use RAMDISK for `/tmp` in  `/etc/fstab`
-  ```
-  tmpfs   /tmp    tmpfs   defaults,noatime,mode=1777,size=8G,uid=0,gid=0   0  0
-  ```
+## Default decisions
 
-## References
-- [SSDOptimization — Debian Wiki](https://wiki.debian.org/SSDOptimization)
-- [Solid State Drives  — Arch Wiki](https://wiki.archlinux.org/index.php/Solid_State_Drives)
-- [SSD Partitioning, Partition Alignment, Optimal Configuration Settings and Performance Testing — siduction.org](https://siduction.org/2012/01/ssd-partitioning-partition-alignment-optimal-configuration-settings-and-performance-testing/)
+| Use case | Selected stack |
+| --- | --- |
+| Linux laptop or workstation | LUKS2 with [Btrfs](docs/filesystems/btrfs.md) |
+| Conservative server, virtual-machine root, or simple Linux data disk | LUKS2 with [Ext4](docs/filesystems/ext4.md) |
+| Database, VM image, container data, build cache, or sustained parallel writes | LUKS2 with [XFS](docs/filesystems/xfs.md) |
+| Managed NAS or storage server | [OpenZFS](docs/filesystems/openzfs.md) with native encrypted datasets |
+| Proven eMMC, UFS, or SD workload | LUKS2 with [F2FS](docs/filesystems/f2fs.md) |
+| Linux-only external backup disk | LUKS2 with [Ext4](docs/filesystems/ext4.md) |
+| Confidential cross-platform removable media | VeraCrypt with exFAT inside |
+| Non-confidential cross-platform exchange | exFAT |
+| EFI System Partition or firmware-required media | FAT32 |
+| Experimental filesystem research | [bcachefs evaluation profile](docs/filesystems/bcachefs.md) |
+
+The [full decision matrix](docs/decision-guide.md#decision-matrix) records the
+reason, cost, integrity boundary, and alternatives for each choice. Portable
+formats and VeraCrypt are covered in the
+[portable and special-purpose profile](docs/filesystems/portable-and-special-purpose.md).
+
+## Core conclusions
+
+- M.2 is a form factor, PCIe is a transport, NVMe is a protocol, and the
+  filesystem is a higher software layer. PCIe 5.0 changes bandwidth, thermal
+  pressure, and where bottlenecks appear. It does not create a Gen5 mount
+  option or remove crash-consistency requirements.
+- Encryption is part of the architecture. Linux-native filesystems containing
+  private data use LUKS2. OpenZFS uses native encrypted datasets when its
+  visible pool metadata is acceptable. Cross-platform confidential media uses
+  VeraCrypt.
+- Checksums, redundant copies, encryption, snapshots, and backups solve
+  different problems. None substitutes for all the others.
+- Safe write ordering remains enabled. Barriers, cache flushes, and FUA are not
+  disabled for benchmark results.
+- Filesystem and cryptsetup defaults remain in place unless a documented,
+  measured workload justifies an exception.
+- Snapshots and RAID are not backups. The operational policy requires an
+  independently encrypted, restore-tested copy.
+
+## Documentation
+
+Start with the [documentation index](docs/README.md), or open the module that
+owns the current decision:
+
+### Architecture and hardware
+
+- [Decision guide](docs/decision-guide.md): non-negotiable rules, complete
+  use-case matrix, and feature boundaries.
+- [PCIe 5.0 NVMe](docs/nvme.md): layer semantics, thermal behavior, health
+  inspection, and rejected hardware-class tuning.
+- [Encryption architecture](docs/encryption.md): LUKS2, OpenZFS native
+  encryption, fscrypt, dm-integrity, dm-verity, TPM2, discard leakage, swap,
+  hibernation, and key recovery.
+
+### Filesystem profiles
+
+- [Filesystem index](docs/filesystems/README.md)
+- [Btrfs](docs/filesystems/btrfs.md)
+- [Ext4](docs/filesystems/ext4.md)
+- [XFS](docs/filesystems/xfs.md)
+- [OpenZFS](docs/filesystems/openzfs.md)
+- [F2FS](docs/filesystems/f2fs.md)
+- [Portable and special-purpose formats](docs/filesystems/portable-and-special-purpose.md)
+- [bcachefs evaluation policy](docs/filesystems/bcachefs.md)
+
+### Configuration and operations
+
+- [Mount options and TRIM](docs/mount-options-and-trim.md)
+- [Deployment procedure](docs/deployment.md)
+- [Operations and recovery](docs/operations-and-recovery.md)
+- [Rejected defaults and anti-patterns](docs/anti-patterns.md)
+- [IEEE reference registry](docs/references.md)
+
+## Safety boundary
+
+Storage-formatting and encryption commands are destructive when pointed at a
+real device. Every placeholder must be replaced, the exact persistent device
+path must be verified with `lsblk`, and a tested backup must exist before
+running `cryptsetup luksFormat`, `mkfs`, partitioning, discard, sanitize, or
+repair operations.
+
+Use the [deployment procedure](docs/deployment.md) for the required inventory,
+backup proof, persistent-device resolution, validation, and end-to-end
+benchmark sequence.
+
+## Research policy
+
+Recommendations rely on current primary or upstream sources, including Linux
+kernel documentation, NVM Express and PCI-SIG specifications, cryptsetup and
+systemd manuals, filesystem project documentation, Microsoft filesystem
+specifications, and vendor hardware documentation.
+
+The shared [IEEE reference registry](docs/references.md) keeps citation numbers
+stable across modules. A time-sensitive recommendation must be revalidated
+against its cited source before the research cutoff is advanced.
