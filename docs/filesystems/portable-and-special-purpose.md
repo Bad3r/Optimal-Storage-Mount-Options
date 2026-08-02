@@ -40,6 +40,18 @@ format does not store Unix ownership or permissions [42]. Use NTFS when Windows
 owns and repairs the volume, not for a new Linux root or Linux-owned application
 store.
 
+## Media of unknown provenance
+
+This guide assumes the operator owns and trusts the hardware. Removable media
+that was found, given, or bought outside a retail channel does not satisfy that
+assumption, and the questions it raises are prior to filesystem selection:
+whether the advertised capacity is real, whether the device advertises
+interfaces beyond mass storage, and whether the controller firmware can be
+trusted at all. Formatting answers none of them.
+
+Triage procedure and the corresponding threat model are maintained separately in
+[Untrusted removable media triage](https://github.com/Bad3r/usb-triage).
+
 ## tmpfs: not an SSD-wear policy
 
 Do not create a fixed 8 GiB `/tmp` tmpfs merely to reduce SSD writes. tmpfs is
